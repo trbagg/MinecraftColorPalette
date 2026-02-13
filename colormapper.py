@@ -5,7 +5,7 @@ from PIL import Image
 image_paths = []
 data = {}
 
-folder_dir = "D:\\Python Projects\\MinecraftColorPalette\\block"
+folder_dir = "./block"
 for image in os.listdir(folder_dir):
     if (image.endswith(".png")):
         image_paths.append(image)
