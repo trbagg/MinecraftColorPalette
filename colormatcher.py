@@ -1,6 +1,5 @@
 import re
 import json
-import numpy as np
 import colorsys
 import tkinter as tk
 
@@ -13,8 +12,6 @@ def hex_to_hls(hex_color):
 
         if len(hex_color) != 6:
             return
-
-        
 
         pattern = re.compile(r"^[0-9a-fA-F]{6}$")
         match = pattern.match(hex_color)
@@ -110,7 +107,6 @@ class ColorBoxApp:
                     container,
                     text='N/A',
                     font=("Arial", 10, "bold"),
-                    #width=10,
                     anchor='w'
                 )
                 block_label.pack(pady=1)
