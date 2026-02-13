@@ -1,6 +1,6 @@
-# Minecraft Server-Up Bot
+# Minecraft Color Palette Matcher
 
-A simple python script for a discord bot for checking whether a minecraft server is up or not.
+A python interface for viewing color theory methods for finding matching minecraft blocks via color averaging.
 
 ## Installation
 1. Clone the repository
@@ -16,7 +16,7 @@ A simple python script for a discord bot for checking whether a minecraft server
     pip install requirements.txt
     ```
 ###(Optional)###
-3.  Place the necessary texture images as 16x16 PNGs in /blocks/ for necessary colormapper.py functionality
+3.  Place the necessary texture images as 16x16 PNGs in the directory: /blocks/ for necessary colormapper.py functionality
 
 ## Usage
 0. (Optional first step) If using colormapper.py, run the populate script:
