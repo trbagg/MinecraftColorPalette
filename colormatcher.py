@@ -589,7 +589,6 @@ class ColorBoxApp:
         return '#%02x%02x%02x' % (r, g, b)
 
 
-
 if __name__ == '__main__':
     root = tk.Tk()
     app = ColorBoxApp(root)
