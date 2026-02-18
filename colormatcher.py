@@ -1,9 +1,11 @@
 import re
 import json
-import colorsys
 import math
+import colorsys
+import itertools
 import tkinter as tk
 import tkinter.font as tkfont
+from functools import partial
 from PIL import Image, ImageTk
 
 
@@ -103,7 +105,7 @@ class ColorBoxApp:
                                     font=self._font_large)
         self.input_entry.pack(pady=5)
         self.input_entry.insert(0, "#CCCCCC")
-        self.checkbox_var = tk.BooleanVar(value=False)
+        self.checkbox_var = tk.BooleanVar(value=True)
         self.checkbox = tk.Checkbutton(
             self._top_frame,
             text="Restrict to block palette",
@@ -112,6 +114,14 @@ class ColorBoxApp:
             font=self._font_small
         )
         self.checkbox.pack(side=tk.LEFT, padx=5)
+
+        self.clear_button = tk.Button(
+            self._top_frame,
+            text="Clear ignore list",
+            command=self.reset_ignore,
+            font=self._font_small
+        )
+        self.clear_button.pack(side=tk.LEFT, padx=5)
 
         # --- Main Content (wheel left, boxes right) ---
         self._content_frame = tk.Frame(root)
@@ -130,13 +140,8 @@ class ColorBoxApp:
         # Right frame: color boxes, centered and evenly spaced
         self.color_frame = tk.Frame(self._content_frame)
         self.color_frame.grid(row=0, column=1, padx=10)
-        self.colors = [
-            "#CCCCCC",
-            "#CCCCCC",
-            "#CCCCCC",
-            "#CCCCCC",
-            "#CCCCCC"
-        ]
+        self.colors = []
+        self.ignores = []
 
         # Create 21 color boxes
         self.color_boxes = []
@@ -144,9 +149,10 @@ class ColorBoxApp:
         self.block_labels = []
         self._box_containers = []
         self._row_frames = []
-        box_sorting = [2,2,3,3,3,4,4]
+        self.box_sorting = [2,2,3,3,3,4,4]
+        x=0
 
-        for j in box_sorting:
+        for j in self.box_sorting:
             row_frame = tk.Frame(self.color_frame)
             row_frame.pack(pady=6)
             self._row_frames.append(row_frame)
@@ -158,15 +164,18 @@ class ColorBoxApp:
                 container.grid(row=0,column=i, padx=10)
                 self._box_containers.append(container)
 
-                color_box = tk.Label(
+                color_box = tk.Button(
                     container,
                     width=6,
                     height=3,
-                    bg=self.colors[i],
+                    bg="#CCCCCC",
                     relief=tk.RAISED,
                     borderwidth=2,
-                    font=self._font_large
+                    font=self._font_large,
+                    command= partial(self.ignore_from_palette, x)
+                    
                 )
+                x += 1
 
                 color_box.pack()
                 self.color_boxes.append(color_box)
@@ -174,7 +183,7 @@ class ColorBoxApp:
                 # Hex label
                 hex_label = tk.Label(
                     container,
-                    text=self.colors[i],
+                    text="#CCCCCC",
                     font=self._font_large
                 )
                 hex_label.pack(pady=1)
@@ -421,19 +430,21 @@ class ColorBoxApp:
         label_offset = max(8, int(self.BASE_LABEL_OFFSET * scale))
         wheel_size = self.wheel_center * 2
 
-        primary_hls = palettes[0][0]
+        primary_hls = palettes[0]
 
-        for i, palette in enumerate(palettes):
+        cumulative = list(itertools.accumulate([x + 1 for x in self.box_sorting]))
+        
+        for idx, hls in enumerate(palettes):
+            i = next(i for i, limit in enumerate(cumulative) if idx <= limit)
             shape = self.PALETTE_META[i]["shape"]
-            for hls in palette:
-                h, l, s = hls
-                x, y = self._hls_to_wheel_xy(h, l, s)
-                fill = self.hls_to_hex(hls)
-                self._draw_shape(
-                    self.wheel_canvas, x, y, shape, fill,
-                    size=marker_size, outline="white",
-                    width=marker_outline, tag="marker"
-                )
+            h, l, s = hls
+            x, y = self._hls_to_wheel_xy(h, l, s)
+            fill = self.hls_to_hex(hls)
+            self._draw_shape(
+                self.wheel_canvas, x, y, shape, fill,
+                size=marker_size, outline="white",
+                width=marker_outline, tag="marker"
+            )
 
         # Primary input color: larger marker drawn on top
         px, py = self._hls_to_wheel_xy(*primary_hls)
@@ -442,23 +453,6 @@ class ColorBoxApp:
             self.wheel_canvas, px, py, "circle", primary_hex,
             size=primary_size, outline="white",
             width=primary_outline, tag="primary_marker"
-        )
-
-        # Hex label near the primary cursor
-        label_y = py + label_offset if py < self.wheel_center else py - label_offset
-        clamp_y = max(4, int(12 * scale))
-        clamp_x = label_half_w + 2
-        label_y = max(clamp_y, min(wheel_size - clamp_y, label_y))
-        label_x = max(clamp_x, min(wheel_size - clamp_x, px))
-
-        self.wheel_canvas.create_rectangle(
-            label_x - label_half_w, label_y - label_half_h,
-            label_x + label_half_w, label_y + label_half_h,
-            fill="white", outline="#666666", width=1, tags="primary_label"
-        )
-        self.wheel_canvas.create_text(
-            label_x, label_y, text=primary_hex,
-            font=self._font_small_bold, fill="black", tags="primary_label"
         )
 
     # ---- Legend ----
@@ -492,43 +486,56 @@ class ColorBoxApp:
 
     # ---- Palette Logic ----
 
+    def ignore_from_palette(self, i):
+        color = self.colors[i] if not self.checkbox_var.get() else self.colors[i] # get the color or restricted palette color based on checkbox
+        self.ignores.append(color)
+        self.get_colors()
+    
+    def reset_ignore(self):
+        self.ignores.clear()
+        self.get_colors()
+
+
     def get_colors(self, *args):
         prim = hex_to_hls(self.entry_var.get())
         if prim is None:
             return
-        colors = self.generate_palette(prim)
-        block_names, block_colors = self.match_colors(colors)
-        use_blocks = self.checkbox_var.get()
-        self.update_boxes(colors if not use_blocks else block_colors, block_names)
-        self._update_wheel_markers(colors if not use_blocks else block_colors)
+        self.colors = self.generate_palette(prim)
+        block_names, block_colors = self.match_colors(self.colors)
+        if self.checkbox_var.get():
+            self.colors = block_colors
+        self.update_boxes(self.colors, block_names)
+        self._update_wheel_markers(self.colors)
 
     def match_colors(self, palettes):
         global block_color_data
 
-        block_color_palettes = []
-        block_name_palettes = []
+        #block_color_palettes = []
+        #block_name_palettes = []
 
-        for palette in palettes:
-            block_colors = []
-            block_names = []
-            for target_color in palette:
-                h1,l1,s1 = target_color
-                min_dist = float('inf')
-                for block_name in block_color_data:
-                    h2,l2,s2 = block_color_data[block_name]
-                    hue_diff = min(abs(h1 - h2), 1 - abs(h1 - h2))
-                    light_weight = 0.25
-                    distance = (hue_diff**2 + ((l1 - l2)**2 * light_weight) + (s1 - s2)**2) ** 0.5
+        #for palette in palettes:
+        block_colors = []
+        block_names = []
+        for target_color in palettes: #palette:
+            h1,l1,s1 = target_color
+            min_dist = float('inf')
+            for block_name in block_color_data:
+                h2,l2,s2 = block_color_data[block_name]
+                hue_diff = min(abs(h1 - h2), 1 - abs(h1 - h2))
+                light_weight = 0.25
+                distance = (hue_diff**2 + ((l1 - l2)**2 * light_weight) + (s1 - s2)**2) ** 0.5
 
-                    if distance < min_dist:
-                        min_dist = distance
-                        nearest_block = block_name
-                block_names.append(nearest_block)
-                block_colors.append(block_color_data[nearest_block])
-            block_color_palettes.append(block_colors)
-            block_name_palettes.append(block_names)
+                if distance < min_dist and (h2,l2,s2) not in self.ignores:
+                    min_dist = distance
+                    nearest_block = block_name
+            block_names.append(nearest_block)
+            block_colors.append(block_color_data[nearest_block])
+        
+        return block_names, block_colors
+        #block_color_palettes.append(block_colors)
+        #block_name_palettes.append(block_names)
 
-        return block_name_palettes, block_color_palettes
+        #return block_name_palettes, block_color_palettes
 
     def generate_palette(self, hls):
         h, l, s = hls
@@ -568,11 +575,12 @@ class ColorBoxApp:
             ((h + (0.0833 * 6)) % 1, l, s),
             ((h + (0.0833 * 8)) % 1, l, s)
         ]]
-        return palettes
+
+        return sum([sublist for sublist in palettes], [])
 
     def update_boxes(self, palettes, block_names):
-        merged_list = sum([sublist for sublist in palettes], [])
-        block_list = sum([sublist for sublist in block_names], [])
+        merged_list = palettes # sum([sublist for sublist in palettes], [])
+        block_list = block_names #sum([sublist for sublist in block_names], [])
         for i, hls in enumerate(merged_list):
             hex_color = self.hls_to_hex(hls)
             block_name = block_list[i]
